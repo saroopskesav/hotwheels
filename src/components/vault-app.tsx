@@ -593,7 +593,7 @@ export default function VaultApp() {
               <section className="series-panel"><div className="panel-heading"><div><span className="eyebrow">COLLECTION MIX</span><h2>Series breakdown</h2></div><button className="icon-button small-icon" aria-label="Series options"><MoreHorizontal size={19} /></button></div><SeriesBars cars={cars} /></section>
               <section className="hunt-panel"><div className="panel-heading"><div><span className="eyebrow">HARD TO FIND</span><h2>Treasure shelf</h2></div><span className="hunt-icon"><Trophy size={18} /></span></div><div className="hunt-count"><strong>{treasureCount.toString().padStart(2, "0")}</strong><span>rare finds in your vault</span></div><div className="hunt-progress"><span style={{ width: `${Math.min(100, treasureCount * 18)}%` }} /></div><div className="hunt-footer"><span>{cars.filter((car) => car.isSuperTreasureHunt).length} Super Treasure Hunts</span><button className="text-action" onClick={() => selectPage("My Garage")}>See all <ArrowRight size={14} /></button></div></section>
             </div>
-            <footer className="page-footer"><span>BUILT FOR THE LOVE OF THE HUNT</span><span>DIECAST VAULT <i>·</i> 2026</span></footer>
+            <footer className="page-footer"><span>Designed and developed by Saroop S Kesav</span><span>Diecast Vault <i>·</i> © SK Inc. {new Date().getFullYear()}</span></footer>
           </section>
         )}
 
