@@ -31,6 +31,7 @@ import {
   SlidersHorizontal,
   Star,
   Tag,
+  Trash2,
   Trophy,
   Upload,
   X,
@@ -310,30 +311,20 @@ export default function VaultApp() {
   async function persistCar(newCar: CollectionCar, values: ReturnType<typeof carInputSchema.parse>) {
     setIsSaving(true);
     if (supabase) {
-      const { data: existingSeries, error: seriesError } = await supabase.from("series").select("id").eq("name", values.series).maybeSingle();
-      if (seriesError) {
+      const { data: savedSeries, error: seriesError } = await supabase.from("series").upsert({ name: values.series }, { onConflict: "user_id,name" }).select("id").single();
+      if (seriesError || !savedSeries) {
         setIsSaving(false);
-        if (seriesError.code === "42P01" || seriesError.code === "PGRST205") {
+        if (seriesError?.code === "42P01" || seriesError?.code === "PGRST205") {
           notify("Supabase is missing the series table. Apply the project migration in SQL Editor, then retry.");
-        } else if (seriesError.code === "42501") {
+        } else if (seriesError?.code === "42501") {
           notify("Supabase denied access to series. Check the series RLS policy and your signed-in session.");
         } else {
-          notify(`Could not check the series (${seriesError.code || "connection error"}). Check Supabase setup, then retry.`);
+          notify(`Could not save the series (${seriesError?.code || "no row returned"}). Check Supabase setup, then retry.`);
         }
         return;
       }
-      let seriesId = existingSeries?.id;
-      if (!seriesId) {
-        const { data: createdSeries, error: createSeriesError } = await supabase.from("series").insert({ name: values.series }).select("id").single();
-        if (createSeriesError) {
-          setIsSaving(false);
-          notify("Could not save this series. Check your connection and try again.");
-          return;
-        }
-        seriesId = createdSeries.id;
-      }
       const carValues = {
-        series_id: seriesId,
+        series_id: savedSeries.id,
         name: values.name,
         manufacturer: values.manufacturer || null,
         model_year: values.modelYear,
@@ -366,26 +357,11 @@ export default function VaultApp() {
         }
         newCar.id = savedCar.id;
       }
-      if (photoFiles.length && session?.user.id) {
-        try {
-          if (editingCarId) await supabase.from("car_images").update({ is_primary: false }).eq("car_id", editingCarId);
-          const imageRecords: { car_id: string; storage_path: string; is_primary: boolean }[] = [];
-          for (const [index, file] of photoFiles.entries()) {
-            const compressed = await compressCollectionImage(file);
-            const storagePath = `${session.user.id}/cars/${newCar.id}/${crypto.randomUUID()}.jpg`;
-            const { error: uploadError } = await supabase.storage.from("diecast-images").upload(storagePath, compressed, { contentType: "image/jpeg", upsert: false });
-            if (uploadError) throw uploadError;
-            imageRecords.push({ car_id: newCar.id, storage_path: storagePath, is_primary: index === 0 });
-          }
-          const { error: imageRowError } = await supabase.from("car_images").insert(imageRecords);
-          if (imageRowError) throw imageRowError;
-          const { data: signedImage } = await supabase.storage.from("diecast-images").createSignedUrl(imageRecords[0].storage_path, 3600);
-          newCar.imageUrl = signedImage?.signedUrl;
-        } catch (imageError) {
-          notify(imageError instanceof Error ? `Car saved, but its photo could not be uploaded: ${imageError.message}` : "Car saved, but its photos could not be uploaded.");
-        }
-      }
     }
+
+    const pendingPhotos = [...photoFiles];
+    const uploadUserId = session?.user.id;
+    const isEditing = Boolean(editingCarId);
     setCars((current) => editingCarId ? current.map((car) => car.id === editingCarId ? newCar : car) : [newCar, ...current]);
     setIsAddOpen(false);
     setActivePage("My Garage");
@@ -393,6 +369,50 @@ export default function VaultApp() {
     setPhotoFiles([]);
     setEditingCarId(null);
     notify(supabase ? editingCarId ? "Car details updated" : "Car saved to your garage" : editingCarId ? "Preview car updated" : "Added to your preview garage");
+
+    if (supabase && pendingPhotos.length && uploadUserId) {
+      void uploadCarPhotos(newCar.id, pendingPhotos, uploadUserId, isEditing);
+    }
+  }
+
+  async function uploadCarPhotos(carId: string, files: File[], userId: string, isEditing: boolean) {
+    if (!supabase) return;
+    const uploadedPaths: string[] = [];
+    let imageRowsCreated = false;
+    const newImagePaths: string[] = [];
+    try {
+      const compressedFiles = await Promise.all(files.map((file) => compressCollectionImage(file)));
+      const results = await Promise.all(compressedFiles.map(async (file, index) => {
+        const storagePath = `${userId}/cars/${carId}/${crypto.randomUUID()}.jpg`;
+        const { error } = await supabase.storage.from("diecast-images").upload(storagePath, file, { contentType: "image/jpeg", upsert: false });
+        return { storagePath, isPrimary: index === 0, error };
+      }));
+      uploadedPaths.push(...results.filter((result) => !result.error).map((result) => result.storagePath));
+      const failedUpload = results.find((result) => result.error);
+      if (failedUpload?.error) throw failedUpload.error;
+
+      const imageRows = results.map(({ storagePath, isPrimary }) => ({ car_id: carId, storage_path: storagePath, is_primary: isPrimary }));
+      const { error: rowError } = await supabase.from("car_images").insert(imageRows);
+      if (rowError) throw rowError;
+      imageRowsCreated = true;
+      newImagePaths.push(...imageRows.map((row) => row.storage_path));
+
+      if (isEditing) {
+        const { error } = await supabase.from("car_images").update({ is_primary: false }).eq("car_id", carId).neq("storage_path", imageRows[0].storage_path);
+        if (error) throw error;
+      }
+
+      const { data: signedImage, error: signedUrlError } = await supabase.storage.from("diecast-images").createSignedUrl(imageRows[0].storage_path, 3600);
+      if (signedUrlError) throw signedUrlError;
+      if (signedImage?.signedUrl) {
+        setCars((current) => current.map((car) => car.id === carId ? { ...car, imageUrl: signedImage.signedUrl } : car));
+      }
+      notify("Car photos added");
+    } catch (imageError) {
+      if (imageRowsCreated) await supabase.from("car_images").delete().in("storage_path", newImagePaths);
+      if (uploadedPaths.length) await supabase.storage.from("diecast-images").remove(uploadedPaths);
+      notify(imageError instanceof Error ? `Car saved, but its photo could not be uploaded: ${imageError.message}` : "Car saved, but its photos could not be uploaded.");
+    }
   }
 
   async function confirmSeparateEntry() {
@@ -612,7 +632,7 @@ function CarGrid({ cars, isListView = false, onFavorite, onQuantity, onRemove, o
   const reduceMotion = useReducedMotion();
   return <div className={`car-grid ${isListView ? "car-list-view" : ""}`}>{cars.map((car, index) => <motion.article className="car-card" key={car.id} initial={reduceMotion ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: Math.min(index * 0.035, 0.2) }}>
     <div className={`car-visual tone-${car.imageTone}`}><span className="visual-grain" />{car.imageUrl ? <span className="car-photo" role="img" aria-label={`${car.name} photo`} style={{ backgroundImage: `url("${car.imageUrl}")` }} /> : <><span className="visual-mark">HOT WHEELS <i>®</i></span><div className="mini-car"><div className="mini-roof" /><div className="mini-window" /><div className="mini-body" /><div className="mini-nose" /><div className="mini-wheel mini-left" /><div className="mini-wheel mini-right" /><div className="mini-flame" /></div></>}<span className="visual-number">{car.collectorNumber}</span>{car.isSuperTreasureHunt && <span className="hunt-badge super">$TH</span>}{car.isTreasureHunt && <span className="hunt-badge">TH</span>}<button className={`favorite-button ${car.isFavorite ? "is-favorite" : ""}`} aria-label={car.isFavorite ? "Remove from favourites" : "Add to favourites"} onClick={() => onFavorite(car.id)}><Heart size={16} fill={car.isFavorite ? "currentColor" : "none"} /></button><span className="quantity-badge">× {car.quantity}</span></div>
-    <div className="car-card-body"><div className="car-card-heading"><span className="car-series">{car.series}</span><div className="card-actions"><button className="card-menu" aria-label={`Edit ${car.name}`} onClick={() => onEdit(car)}><Pencil size={14} /></button><button className="card-menu" aria-label={`Remove ${car.name}`} onClick={() => onRemove(car.id)}><MoreHorizontal size={18} /></button></div></div><h3>{car.name}</h3><div className="car-meta"><span>{car.modelYear}</span><i /> <span>{car.collectorNumber}</span><i /> <span>{car.condition}</span></div><div className="car-card-footer"><span className="car-price">${car.purchasePrice.toFixed(2)} <small>each</small></span><div className="quantity-control"><button onClick={() => onQuantity(car.id, -1)} aria-label="Decrease quantity">−</button><span>{car.quantity}</span><button onClick={() => onQuantity(car.id, 1)} aria-label="Increase quantity">+</button></div></div></div>
+    <div className="car-card-body"><div className="car-card-heading"><span className="car-series">{car.series}</span><div className="card-actions"><button className="card-menu" aria-label={`Edit ${car.name}`} onClick={() => onEdit(car)}><Pencil size={14} /></button><button className="card-menu delete-card-button" aria-label={`Delete ${car.name}`} title={`Delete ${car.name}`} onClick={() => onRemove(car.id)}><Trash2 size={16} /></button></div></div><h3>{car.name}</h3><div className="car-meta"><span>{car.modelYear}</span><i /> <span>{car.collectorNumber}</span><i /> <span>{car.condition}</span></div><div className="car-card-footer"><span className="car-price">${car.purchasePrice.toFixed(2)} <small>each</small></span><div className="quantity-control"><button onClick={() => onQuantity(car.id, -1)} aria-label="Decrease quantity">−</button><span>{car.quantity}</span><button onClick={() => onQuantity(car.id, 1)} aria-label="Increase quantity">+</button></div></div></div>
   </motion.article>)}</div>;
 }
 

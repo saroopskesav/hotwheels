@@ -181,6 +181,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .car-series { overflow: hidden; color: #d08872; font-size: 8px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .card-menu { display: grid; width: 23px; height: 22px; flex: 0 0 auto; place-items: center; margin: -4px -4px -4px 0; border: 0; background: none; color: #79827e; cursor: pointer; }
 .card-menu:hover { color: #fff; }
+.delete-card-button { color: #8d7772; }.delete-card-button:hover { color: #ff806b; }
 .car-card h3 { overflow: hidden; margin: 3px 0 6px; color: #e7ebe5; font-family: var(--font-display), sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap; }
 .car-meta { display: flex; align-items: center; gap: 6px; color: #818a86; font-size: 8px; }
 .car-meta i { width: 2px; height: 2px; border-radius: 50%; background: #68706d; }
