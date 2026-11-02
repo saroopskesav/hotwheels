@@ -26,6 +26,7 @@ import {
   Plus,
   Search,
   Settings2,
+  ScanLine,
   ShieldCheck,
   SlidersHorizontal,
   Star,
@@ -74,6 +75,7 @@ export default function VaultApp() {
   const [sortMode, setSortMode] = useState("Recently added");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [scanIntoCarForm, setScanIntoCarForm] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isAccountOpen, setIsAccountOpen] = useState(false);
   const [isListView, setIsListView] = useState(false);
@@ -212,6 +214,32 @@ export default function VaultApp() {
   function notify(message: string) {
     setToast(message);
     window.setTimeout(() => setToast(""), 2800);
+  }
+
+  function openScanner(forCarForm = false) {
+    setScanIntoCarForm(forCarForm);
+    setIsScannerOpen(true);
+  }
+
+  function handleBarcodeDetected(barcode: string) {
+    const normalized = normalizeBarcode(barcode);
+    setIsScannerOpen(false);
+    if (scanIntoCarForm) {
+      setForm((current) => ({ ...current, barcode: normalized }));
+      setScanIntoCarForm(false);
+      notify("Barcode added. Check the casting details before saving.");
+      return;
+    }
+
+    const matches = cars.filter((car) => normalizeBarcode(car.barcode) === normalized);
+    if (matches.length) {
+      setActivePage("My Garage");
+      setQuery(normalized);
+      notify(`${matches.length} possible barcode match${matches.length === 1 ? "" : "es"}. Barcode is not unique; confirm the casting details.`);
+    } else {
+      openAddCar(normalized);
+      notify("Barcode added to the form. Enter the casting details manually.");
+    }
   }
 
   function openAddCar(barcode = "") {
@@ -463,7 +491,7 @@ export default function VaultApp() {
           ))}
         </nav>
         <span className="nav-caption tools-caption">TOOLS</span>
-        <button className="nav-link" onClick={() => setIsScannerOpen(true)}><Command size={18} strokeWidth={1.8} /><span>Scan a car</span><span className="shortcut">⌘ K</span></button>
+        <button className="nav-link" onClick={() => openScanner()}><Command size={18} strokeWidth={1.8} /><span>Scan a car</span><span className="shortcut">⌘ K</span></button>
         <button className={`nav-link ${activePage === "Series" ? "active" : ""}`} onClick={() => selectPage("Series")}><Tag size={18} strokeWidth={1.8} /><span>Series library</span></button>
         <button className="nav-link" onClick={() => notify("Settings will be available when your vault is connected")}><Settings2 size={18} strokeWidth={1.8} /><span>Settings</span></button>
         <div className="sidebar-bottom">
@@ -501,7 +529,7 @@ export default function VaultApp() {
                 <span className="eyebrow eyebrow-red"><span className="eyebrow-rule" /> THE COLLECTOR’S GARAGE</span>
                 <h2>Every casting<br />has a <em>story.</em></h2>
                 <p>Your collection. Your passion. Your vault.</p>
-                <div className="welcome-actions"><button className="button button-primary" onClick={() => selectPage("My Garage")}>Explore my garage <ArrowRight size={16} /></button><button className="text-action" onClick={() => setIsScannerOpen(true)}><Command size={15} /> Scan a barcode</button></div>
+                <div className="welcome-actions"><button className="button button-primary" onClick={() => selectPage("My Garage")}>Explore my garage <ArrowRight size={16} /></button><button className="text-action" onClick={() => openScanner()}><Command size={15} /> Scan a barcode</button></div>
               </div>
               <div className="hero-art" aria-label="Illustration of a collectible diecast car">
                 <div className="hero-grid" /><div className="hero-track-line" /><div className="hero-glow" />
@@ -554,16 +582,16 @@ export default function VaultApp() {
       <nav className="mobile-bottom-nav" aria-label="Mobile navigation">
         <button className={activePage === "Overview" ? "mobile-active" : ""} onClick={() => selectPage("Overview")}><LayoutDashboard size={19} /><span>Home</span></button>
         <button className={activePage === "My Garage" ? "mobile-active" : ""} onClick={() => selectPage("My Garage")}><CarFront size={19} /><span>Garage</span></button>
-        <button className="mobile-scan-action" onClick={() => setIsScannerOpen(true)} aria-label="Scan a barcode"><span><Command size={20} /></span><small>Scan</small></button>
+        <button className="mobile-scan-action" onClick={() => openScanner()} aria-label="Scan a barcode"><span><Command size={20} /></span><small>Scan</small></button>
         <button className={activePage === "Wishlist" ? "mobile-active" : ""} onClick={() => selectPage("Wishlist")}><Heart size={19} /><span>Wishlist</span></button>
         <button onClick={supabase ? () => setIsAccountOpen(true) : () => notify("Connect Supabase to enable your profile")}><span className="mobile-profile">{(session?.user.email ?? "SC").slice(0, 2).toUpperCase()}</span><span>Profile</span></button>
       </nav>
 
       <AnimatePresence>
         {isAccountOpen && session && <motion.div className="account-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={(event) => { if (event.target === event.currentTarget) setIsAccountOpen(false); }}><motion.section className="account-panel" role="dialog" aria-modal="true" aria-labelledby="account-title" initial={{ opacity: 0, y: 8, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 5 }}><button className="icon-button account-close" aria-label="Close account panel" onClick={() => setIsAccountOpen(false)}><X size={17} /></button><span className="account-avatar">{(session.user.user_metadata.display_name ?? session.user.email ?? "SC").slice(0, 2).toUpperCase()}</span><span className="eyebrow">YOUR ACCOUNT</span><h2 id="account-title">{session.user.user_metadata.display_name ?? "Collector"}</h2><p>{session.user.email}</p><div className="account-security"><span className="status-dot" /> Private collection connected</div><button className="button button-quiet account-signout" onClick={() => void signOut()}><LogOut size={15} /> Sign out</button></motion.section></motion.div>}
-        {isAddOpen && <AddCarModal form={form} setForm={setForm} photos={photoFiles} setPhotos={setPhotoFiles} saving={isSaving} editing={Boolean(editingCarId)} onClose={() => setIsAddOpen(false)} onSubmit={createCar} />}
+        {isAddOpen && <AddCarModal form={form} setForm={setForm} photos={photoFiles} setPhotos={setPhotoFiles} saving={isSaving} editing={Boolean(editingCarId)} onScanBarcode={() => openScanner(true)} onClose={() => setIsAddOpen(false)} onSubmit={createCar} />}
         {duplicateCandidate && pendingCar && <DuplicateModal car={duplicateCandidate} pendingCar={pendingCar} onClose={dismissDuplicate} onAddQuantity={addDuplicateQuantity} onAddSeparate={confirmSeparateEntry} />}
-        {isScannerOpen && <ScannerModal onClose={() => setIsScannerOpen(false)} onDetected={(barcode) => { setIsScannerOpen(false); const matches = cars.filter((car) => normalizeBarcode(car.barcode) === normalizeBarcode(barcode)); if (matches.length) { setActivePage("My Garage"); setQuery(normalizeBarcode(barcode)); notify(`${matches.length} possible barcode match${matches.length === 1 ? "" : "es"}. Barcode is not unique; confirm the casting details.`); } else { openAddCar(barcode); notify("Barcode added to the form. Enter the casting details manually."); } }} />}
+        {isScannerOpen && <ScannerModal onClose={() => { setIsScannerOpen(false); setScanIntoCarForm(false); }} onDetected={handleBarcodeDetected} />}
       </AnimatePresence>
       <AnimatePresence>{toast && <motion.div className="toast-message" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}><Check size={16} /> {toast}</motion.div>}</AnimatePresence>
     </div>
@@ -593,14 +621,14 @@ function DuplicateModal({ car, pendingCar, onClose, onAddQuantity, onAddSeparate
   return <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.section className="duplicate-modal" role="dialog" aria-modal="true" aria-labelledby="duplicate-title" initial={{ opacity: 0, y: 12, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8 }}><span className="duplicate-icon"><ShieldCheck size={21} /></span><span className="eyebrow">COLLECTION CHECK</span><h2 id="duplicate-title">This car may already be in your collection.</h2><p>We found a similar casting. Barcodes and collector numbers can be shared, so the final call is yours.</p><div className="duplicate-match"><strong>{car.name}</strong><span>{car.series} · {car.modelYear} · #{car.collectorNumber}</span><small>Current quantity: {car.quantity} &nbsp;·&nbsp; Adding: {pendingCar.quantity}</small></div><div className="duplicate-actions"><button className="button button-quiet" onClick={onClose}>Cancel</button><button className="button button-quiet" onClick={onAddSeparate}>Add separate entry</button><button className="button button-primary" onClick={onAddQuantity}>Increase quantity</button></div></motion.section></motion.div>;
 }
 
-function AddCarModal({ form, setForm, photos, setPhotos, saving, editing, onClose, onSubmit }: { form: CarFormState; setForm: React.Dispatch<React.SetStateAction<CarFormState>>; photos: File[]; setPhotos: React.Dispatch<React.SetStateAction<File[]>>; saving: boolean; editing: boolean; onClose: () => void; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void | Promise<void> }) {
+function AddCarModal({ form, setForm, photos, setPhotos, saving, editing, onScanBarcode, onClose, onSubmit }: { form: CarFormState; setForm: React.Dispatch<React.SetStateAction<CarFormState>>; photos: File[]; setPhotos: React.Dispatch<React.SetStateAction<File[]>>; saving: boolean; editing: boolean; onScanBarcode: () => void; onClose: () => void; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void | Promise<void> }) {
   const [photoError, setPhotoError] = useState("");
   const photoPreviews = useMemo(() => photos.map((photo) => URL.createObjectURL(photo)), [photos]);
   useEffect(() => () => photoPreviews.forEach((url) => URL.revokeObjectURL(url)), [photoPreviews]);
   return <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><motion.section className="add-modal" role="dialog" aria-modal="true" aria-labelledby="add-car-title" initial={{ opacity: 0, y: 18, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.99 }} transition={{ duration: 0.2 }}>
     <div className="modal-header"><div><span className="eyebrow">{editing ? "EDIT CASTING" : "NEW CASTING"}</span><h2 id="add-car-title">{editing ? "Update your vault" : "Add to your vault"}</h2><p>{editing ? "Keep your collection details current." : "Record the details while they’re fresh."}</p></div><button className="icon-button" onClick={onClose} aria-label="Close"><X size={19} /></button></div>
     <form onSubmit={onSubmit} className="add-car-form"><div className="photo-upload"><label className="upload-dropzone"><input type="file" accept="image/*" capture="environment" multiple onChange={(event) => { const selected = Array.from(event.target.files ?? []); if (selected.length > 5) { setPhotoError("Choose up to five photos."); return; } if (selected.some((file) => !file.type.startsWith("image/") || file.size > 8 * 1024 * 1024)) { setPhotoError("Each photo must be an image smaller than 8 MB."); return; } setPhotoError(""); setPhotos(selected); }} /><span><ImagePlus size={21} /></span><strong>{photos.length ? `${photos.length} photo${photos.length === 1 ? "" : "s"} selected` : "Take a photo"}</strong><small>Use camera or choose up to five</small></label><div className="upload-guidance"><Upload size={15} /><span>{photoError || (photos.length ? "Photos resize before private upload. First image becomes the primary photo." : "Images are compressed and stored in your private vault when connected.")}</span></div>{photoPreviews.length > 0 && <div className="photo-preview-strip">{photoPreviews.map((url, index) => <div className="photo-preview" key={url}><span className="photo-preview-image" role="img" aria-label={`Selected car photo ${index + 1}`} style={{ backgroundImage: `url("${url}")` }} /><button type="button" onClick={() => setPhotos((current) => current.filter((_, photoIndex) => photoIndex !== index))} aria-label={`Remove photo ${index + 1}`}><X size={12} /></button></div>)}</div>}</div>
-      <div className="form-section-title"><span>01</span><b>IDENTIFICATION</b></div><label className="form-field full-field"><span>Car name <i>*</i></span><input autoFocus required maxLength={120} value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="e.g. '69 Dodge Charger 500" /></label><div className="form-grid"><label className="form-field"><span>Series <i>*</i></span><input required maxLength={80} value={form.series} onChange={(event) => setForm((current) => ({ ...current, series: event.target.value }))} placeholder="e.g. HW Muscle Mania" /></label><label className="form-field"><span>Manufacturer</span><input maxLength={80} value={form.manufacturer} onChange={(event) => setForm((current) => ({ ...current, manufacturer: event.target.value }))} placeholder="Dodge" /></label><label className="form-field"><span>Collector number</span><input maxLength={24} value={form.collectorNumber} onChange={(event) => setForm((current) => ({ ...current, collectorNumber: event.target.value }))} placeholder="088/250" /></label><label className="form-field"><span>Model year</span><input type="number" min="1968" max="2100" value={form.modelYear} onChange={(event) => setForm((current) => ({ ...current, modelYear: event.target.value }))} /></label><label className="form-field"><span>Colour</span><input maxLength={60} value={form.color} onChange={(event) => setForm((current) => ({ ...current, color: event.target.value }))} placeholder="Spectraflame red" /></label><label className="form-field full-field"><span>Barcode <small>Optional · not unique to a casting</small></span><input inputMode="numeric" maxLength={32} value={form.barcode} onChange={(event) => setForm((current) => ({ ...current, barcode: event.target.value }))} placeholder="Scan or enter manually" /></label></div>
+      <div className="form-section-title"><span>01</span><b>IDENTIFICATION</b></div><label className="form-field full-field"><span>Car name <i>*</i></span><input autoFocus required maxLength={120} value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="e.g. '69 Dodge Charger 500" /></label><div className="form-grid"><label className="form-field"><span>Series <i>*</i></span><input required maxLength={80} value={form.series} onChange={(event) => setForm((current) => ({ ...current, series: event.target.value }))} placeholder="e.g. HW Muscle Mania" /></label><label className="form-field"><span>Manufacturer</span><input maxLength={80} value={form.manufacturer} onChange={(event) => setForm((current) => ({ ...current, manufacturer: event.target.value }))} placeholder="Dodge" /></label><label className="form-field"><span>Collector number</span><input maxLength={24} value={form.collectorNumber} onChange={(event) => setForm((current) => ({ ...current, collectorNumber: event.target.value }))} placeholder="088/250" /></label><label className="form-field"><span>Model year</span><input type="number" min="1968" max="2100" value={form.modelYear} onChange={(event) => setForm((current) => ({ ...current, modelYear: event.target.value }))} /></label><label className="form-field"><span>Colour</span><input maxLength={60} value={form.color} onChange={(event) => setForm((current) => ({ ...current, color: event.target.value }))} placeholder="Spectraflame red" /></label><div className="form-field full-field"><span>Barcode <small>Optional · not unique to a casting</small></span><div className="barcode-input-row"><input inputMode="numeric" maxLength={32} value={form.barcode} onChange={(event) => setForm((current) => ({ ...current, barcode: event.target.value }))} placeholder="Scan or enter manually" aria-label="Barcode" /><button type="button" className="button button-quiet barcode-scan-button" onClick={onScanBarcode}><ScanLine size={15} /> Scan barcode</button></div></div></div>
       <div className="form-section-title details-title"><span>02</span><b>IN YOUR COLLECTION</b></div><div className="form-grid"><label className="form-field"><span>Quantity</span><input type="number" min="1" max="9999" value={form.quantity} onChange={(event) => setForm((current) => ({ ...current, quantity: event.target.value }))} /></label><label className="form-field"><span>Paid (CAD)</span><input type="number" min="0" step="0.01" value={form.purchasePrice} onChange={(event) => setForm((current) => ({ ...current, purchasePrice: event.target.value }))} placeholder="0.00" /></label><label className="form-field"><span>Purchase date</span><input type="date" value={form.purchaseDate} onChange={(event) => setForm((current) => ({ ...current, purchaseDate: event.target.value }))} /></label><label className="form-field"><span>Purchase location</span><input maxLength={120} value={form.purchaseLocation} onChange={(event) => setForm((current) => ({ ...current, purchaseLocation: event.target.value }))} placeholder="Shop or event" /></label><label className="form-field full-field"><span>Condition</span><select value={form.condition} onChange={(event) => setForm((current) => ({ ...current, condition: event.target.value as CollectionCar["condition"] }))}>{["Carded", "Loose", "Mint", "Opened", "Damaged"].map((condition) => <option key={condition}>{condition}</option>)}</select></label></div><div className="form-flags"><label><input type="checkbox" checked={form.isFavorite} onChange={(event) => setForm((current) => ({ ...current, isFavorite: event.target.checked }))} /><span>Favourite</span></label><label><input type="checkbox" checked={form.isTreasureHunt} onChange={(event) => setForm((current) => ({ ...current, isTreasureHunt: event.target.checked, isSuperTreasureHunt: event.target.checked ? current.isSuperTreasureHunt : false }))} /><span>Treasure Hunt</span></label><label><input type="checkbox" checked={form.isSuperTreasureHunt} onChange={(event) => setForm((current) => ({ ...current, isSuperTreasureHunt: event.target.checked, isTreasureHunt: event.target.checked || current.isTreasureHunt }))} /><span>Super Treasure Hunt</span></label></div><label className="form-field full-field"><span>Notes</span><textarea rows={3} maxLength={1000} value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} placeholder="A detail worth remembering..." /></label>
       <div className="modal-footer"><button type="button" className="button button-quiet" onClick={onClose} disabled={saving}>Cancel</button><button type="submit" className="button button-primary" disabled={saving}>{saving ? "Saving..." : editing ? "Save changes" : <><Plus size={16} /> Add casting</>}</button></div>
     </form>
