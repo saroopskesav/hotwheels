@@ -1,36 +1,56 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Diecast Vault
 
-## Getting Started
+Diecast Vault is a responsive collection manager for Hot Wheels collectors. It uses Next.js App Router, TypeScript, Tailwind CSS, Supabase Auth/Postgres/Storage, and a browser-based ZXing barcode scanner.
 
-First, run the development server:
+## Current state
 
-```bash
+The app includes email/password sign-in and reset-link requests, an owner-isolated Supabase schema, collection add/edit/soft-delete and quantity/favourite updates, private photo uploads, a ZXing camera scanner, barcode/manual entry, duplicate review, wishlist and series management, collection analytics, and responsive garage filters. With no Supabase environment variables, it shows labeled example data and keeps changes in memory only; refresh clears preview changes.
+
+## Local development
+
+Requirements: Node.js 20.19 or later and npm. Install packages and start the development server:
+
+```sh
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`. Use `npm run lint`, `npm run typecheck`, `npm test`, and `npm run build` to validate changes. Camera access requires HTTPS outside localhost and a camera permission grant.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Supabase setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Create a Supabase project and copy its Project URL and publishable/anon key from the API settings.
+2. Copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Never add a service-role key to this app.
+3. Apply `supabase/migrations/202611020001_initial_schema.sql` in the Supabase SQL editor or with the Supabase CLI (`supabase db push`). The migration creates the schema, owner policies, private `diecast-images` bucket, and signup starter series.
+4. In Authentication settings, enable email/password and configure the site URL and redirect allowlist for local development and the production domain. The signup flow may require email confirmation depending on the project settings.
+5. The storage bucket is private. Image object paths must begin with the authenticated user's UUID; RLS policies enforce ownership.
 
-## Learn More
+## Vercel deployment
 
-To learn more about Next.js, take a look at the following resources:
+1. Push this repository to GitHub and import it in Vercel.
+2. Set the project runtime to Node.js 22.x in Vercel settings.
+3. Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to the Vercel environment groups used for Preview and Production.
+4. Add the Vercel production URL and preview URLs to Supabase Auth redirect/site URL configuration.
+5. Deploy from the connected Git repository. Vercel handles application deployment; GitHub Actions only validates changes.
+6. Verify signup/sign-in, database access, private image upload, and camera permissions on the HTTPS deployment.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Mobile camera checks
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- iPhone Safari: open the HTTPS app, grant camera permission, scan a retail barcode, then add casting details manually.
+- Android Chrome: grant camera permission and test rear-camera scanning and manual UPC/EAN entry.
+- Desktop Chrome or Edge: grant camera access or enter a barcode in the scanner dialog.
 
-## Deploy on Vercel
+## Validation
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+GitHub Actions runs lint, type checking, unit tests, and a production build on pull requests and pushes to `main`. Collection analytics use recorded data only, not market estimates.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Current limitations
+
+- The scanner supports live UPC/EAN decoding and manual entry. Camera switching and flashlight controls are not implemented.
+- Photos support up to five compressed uploads and a signed primary image. Cropping, rotation, and a multi-image detail gallery are not implemented.
+- Wishlist images and an acquired/removal lifecycle are not implemented; “Move to collection” prefills the add form.
+- The dashboard is a single-page shell. Dedicated car detail routes, pagination, and a service worker/offline cache are not included.
+- Automated tests currently cover validation, barcode normalization, and duplicate identity rules. Auth, database isolation, camera, and upload integration need a configured Supabase project for end-to-end testing.
+- The forms use controlled inputs with Zod validation; React Hook Form is installed but not yet used.
+- Password reset email requests are implemented; the password-change callback screen is not.
+- The visual controls are project-specific Tailwind components rather than shadcn/ui. The app currently uses a fixed dark appearance; next-themes and Sonner are installed but not wired into the UI.
