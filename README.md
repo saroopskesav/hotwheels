@@ -22,8 +22,9 @@ Open `http://localhost:3000`. Use `npm run lint`, `npm run typecheck`, `npm test
 1. Create a Supabase project and copy its Project URL and publishable/anon key from the API settings.
 2. Copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Never add a service-role key to this app.
 3. Apply `supabase/migrations/202611020001_initial_schema.sql` in the Supabase SQL editor or with the Supabase CLI (`supabase db push`). The migration creates the schema, owner policies, private `diecast-images` bucket, and signup starter series.
-4. In Authentication settings, enable email/password and configure the site URL and redirect allowlist for local development and the production domain. The signup flow may require email confirmation depending on the project settings.
-5. The storage bucket is private. Image object paths must begin with the authenticated user's UUID; RLS policies enforce ownership.
+4. In Authentication settings, enable email/password. Set the Site URL to your production app domain, and add these Redirect URLs: `https://YOUR-PRODUCTION-DOMAIN/auth/callback`, `https://YOUR-VERCEL-PROJECT.vercel.app/auth/callback`, `https://*-YOUR-TEAM.vercel.app/auth/callback` if using Vercel preview deployments, and `http://localhost:3000/auth/callback` for local work. The signup and password-reset flows send users to the current app origin's `/auth/callback`; Supabase only accepts origins/paths in this allowlist. The signup flow may require email confirmation depending on project settings.
+5. If confirmation emails contain a `localhost` link in production, update the Supabase Site URL, review the email template so its confirmation link uses Supabase's `{{ .ConfirmationURL }}` (or the approved redirect target), then register again/request a fresh email. Old confirmation links retain their original redirect and cannot be changed after they have been sent.
+6. The storage bucket is private. Image object paths must begin with the authenticated user's UUID; RLS policies enforce ownership.
 
 ## Vercel deployment
 

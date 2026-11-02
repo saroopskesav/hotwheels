@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { ArrowRight, Gauge, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { createClient } from "@/lib/supabase/client";
 
 type Client = NonNullable<ReturnType<typeof createClient>>;
@@ -14,8 +14,13 @@ export default function AuthGate({ client }: { client: Client }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("authError") === "confirmation" ? "That confirmation link is invalid or expired. Request a new confirmation email and try again." : "");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("authError")) window.history.replaceState({}, "", window.location.pathname);
+  }, []);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -24,11 +29,11 @@ export default function AuthGate({ client }: { client: Client }) {
     setBusy(true);
     try {
       if (mode === "register") {
-        const { data, error: authError } = await client.auth.signUp({ email, password, options: { data: { display_name: displayName.trim() } } });
+        const { data, error: authError } = await client.auth.signUp({ email, password, options: { data: { display_name: displayName.trim() }, emailRedirectTo: `${window.location.origin}/auth/callback?next=/` } });
         if (authError) throw authError;
         if (!data.session) setMessage("Check your inbox to confirm your email, then sign in.");
       } else if (mode === "reset") {
-        const { error: authError } = await client.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/` });
+        const { error: authError } = await client.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/auth/callback?next=/` });
         if (authError) throw authError;
         setMessage("If an account exists for that email, a reset link is on its way.");
       } else {

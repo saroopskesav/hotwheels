@@ -19,6 +19,7 @@ import {
   ImagePlus,
   LayoutDashboard,
   List,
+  LogOut,
   Menu,
   MoreHorizontal,
   Pencil,
@@ -74,6 +75,7 @@ export default function VaultApp() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isAccountOpen, setIsAccountOpen] = useState(false);
   const [isListView, setIsListView] = useState(false);
   const [toast, setToast] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -426,6 +428,7 @@ export default function VaultApp() {
     if (!supabase) return;
     const { error } = await supabase.auth.signOut();
     if (error) notify("Could not sign out. Please try again.");
+    else setIsAccountOpen(false);
   }
 
   function selectPage(page: NavigationItem) {
@@ -465,7 +468,7 @@ export default function VaultApp() {
         <button className="nav-link" onClick={() => notify("Settings will be available when your vault is connected")}><Settings2 size={18} strokeWidth={1.8} /><span>Settings</span></button>
         <div className="sidebar-bottom">
           <div className="vault-status"><span className="status-dot" /><span><b>{supabase ? "Private vault" : "Preview mode"}</b><small>{supabase ? "Synced to your account" : "Changes are session only"}</small></span></div>
-          <button className="profile-row" onClick={supabase ? signOut : () => notify("Add Supabase credentials to enable your account")}>
+          <button className="profile-row" onClick={() => supabase ? setIsAccountOpen((open) => !open) : notify("Add Supabase credentials to enable your account")}>
             <span className="profile-avatar">{(session?.user.user_metadata.display_name ?? session?.user.email ?? "SC").slice(0, 2).toUpperCase()}</span><span><b>{session?.user.user_metadata.display_name ?? "Collector"}</b><small>{session?.user.email ?? "Local preview"}</small></span><MoreHorizontal size={19} />
           </button>
         </div>
@@ -480,7 +483,7 @@ export default function VaultApp() {
           <div className="topbar-actions">
             <label className="global-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search your collection" aria-label="Search your collection" /><kbd>⌘ K</kbd></label>
             <button className="icon-button notification-button" aria-label="Notifications" onClick={() => notify("You’re all caught up")}><Bell size={18} /><i /></button>
-            <button className="topbar-avatar" aria-label={supabase ? "Sign out" : "Profile"} onClick={supabase ? signOut : () => notify("Connect Supabase to enable your profile")}>{(session?.user.user_metadata.display_name ?? session?.user.email ?? "SC").slice(0, 2).toUpperCase()}</button>
+            <button className="topbar-avatar" aria-label="Open account" aria-expanded={isAccountOpen} onClick={() => supabase ? setIsAccountOpen((open) => !open) : notify("Connect Supabase to enable your profile")}>{(session?.user.user_metadata.display_name ?? session?.user.email ?? "SC").slice(0, 2).toUpperCase()}</button>
             <button className="button button-primary top-add" onClick={() => openAddCar()}><Plus size={16} /> Add car</button>
           </div>
         </header>
@@ -553,10 +556,11 @@ export default function VaultApp() {
         <button className={activePage === "My Garage" ? "mobile-active" : ""} onClick={() => selectPage("My Garage")}><CarFront size={19} /><span>Garage</span></button>
         <button className="mobile-scan-action" onClick={() => setIsScannerOpen(true)} aria-label="Scan a barcode"><span><Command size={20} /></span><small>Scan</small></button>
         <button className={activePage === "Wishlist" ? "mobile-active" : ""} onClick={() => selectPage("Wishlist")}><Heart size={19} /><span>Wishlist</span></button>
-        <button onClick={supabase ? signOut : () => notify("Connect Supabase to enable your profile")}><span className="mobile-profile">{(session?.user.email ?? "SC").slice(0, 2).toUpperCase()}</span><span>{supabase ? "Sign out" : "Profile"}</span></button>
+        <button onClick={supabase ? () => setIsAccountOpen(true) : () => notify("Connect Supabase to enable your profile")}><span className="mobile-profile">{(session?.user.email ?? "SC").slice(0, 2).toUpperCase()}</span><span>Profile</span></button>
       </nav>
 
       <AnimatePresence>
+        {isAccountOpen && session && <motion.div className="account-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={(event) => { if (event.target === event.currentTarget) setIsAccountOpen(false); }}><motion.section className="account-panel" role="dialog" aria-modal="true" aria-labelledby="account-title" initial={{ opacity: 0, y: 8, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 5 }}><button className="icon-button account-close" aria-label="Close account panel" onClick={() => setIsAccountOpen(false)}><X size={17} /></button><span className="account-avatar">{(session.user.user_metadata.display_name ?? session.user.email ?? "SC").slice(0, 2).toUpperCase()}</span><span className="eyebrow">YOUR ACCOUNT</span><h2 id="account-title">{session.user.user_metadata.display_name ?? "Collector"}</h2><p>{session.user.email}</p><div className="account-security"><span className="status-dot" /> Private collection connected</div><button className="button button-quiet account-signout" onClick={() => void signOut()}><LogOut size={15} /> Sign out</button></motion.section></motion.div>}
         {isAddOpen && <AddCarModal form={form} setForm={setForm} photos={photoFiles} setPhotos={setPhotoFiles} saving={isSaving} editing={Boolean(editingCarId)} onClose={() => setIsAddOpen(false)} onSubmit={createCar} />}
         {duplicateCandidate && pendingCar && <DuplicateModal car={duplicateCandidate} pendingCar={pendingCar} onClose={dismissDuplicate} onAddQuantity={addDuplicateQuantity} onAddSeparate={confirmSeparateEntry} />}
         {isScannerOpen && <ScannerModal onClose={() => setIsScannerOpen(false)} onDetected={(barcode) => { setIsScannerOpen(false); const matches = cars.filter((car) => normalizeBarcode(car.barcode) === normalizeBarcode(barcode)); if (matches.length) { setActivePage("My Garage"); setQuery(normalizeBarcode(barcode)); notify(`${matches.length} possible barcode match${matches.length === 1 ? "" : "es"}. Barcode is not unique; confirm the casting details.`); } else { openAddCar(barcode); notify("Barcode added to the form. Enter the casting details manually."); } }} />}
