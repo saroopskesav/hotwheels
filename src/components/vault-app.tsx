@@ -313,7 +313,13 @@ export default function VaultApp() {
       const { data: existingSeries, error: seriesError } = await supabase.from("series").select("id").eq("name", values.series).maybeSingle();
       if (seriesError) {
         setIsSaving(false);
-        notify("Could not check the series. Please try again.");
+        if (seriesError.code === "42P01" || seriesError.code === "PGRST205") {
+          notify("Supabase is missing the series table. Apply the project migration in SQL Editor, then retry.");
+        } else if (seriesError.code === "42501") {
+          notify("Supabase denied access to series. Check the series RLS policy and your signed-in session.");
+        } else {
+          notify(`Could not check the series (${seriesError.code || "connection error"}). Check Supabase setup, then retry.`);
+        }
         return;
       }
       let seriesId = existingSeries?.id;
