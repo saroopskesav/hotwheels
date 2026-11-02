@@ -362,6 +362,9 @@ export default function VaultApp() {
     const pendingPhotos = [...photoFiles];
     const uploadUserId = session?.user.id;
     const isEditing = Boolean(editingCarId);
+    const previousImageUrl = editingCarId ? cars.find((car) => car.id === editingCarId)?.imageUrl : undefined;
+    const localImagePreview = supabase && pendingPhotos.length ? URL.createObjectURL(pendingPhotos[0]) : undefined;
+    if (localImagePreview) newCar.imageUrl = localImagePreview;
     setCars((current) => editingCarId ? current.map((car) => car.id === editingCarId ? newCar : car) : [newCar, ...current]);
     setIsAddOpen(false);
     setActivePage("My Garage");
@@ -370,12 +373,14 @@ export default function VaultApp() {
     setEditingCarId(null);
     notify(supabase ? editingCarId ? "Car details updated" : "Car saved to your garage" : editingCarId ? "Preview car updated" : "Added to your preview garage");
 
-    if (supabase && pendingPhotos.length && uploadUserId) {
-      void uploadCarPhotos(newCar.id, pendingPhotos, uploadUserId, isEditing);
+    if (supabase && pendingPhotos.length && uploadUserId && localImagePreview) {
+      void uploadCarPhotos(newCar.id, pendingPhotos, uploadUserId, isEditing, localImagePreview, previousImageUrl);
+    } else if (localImagePreview) {
+      URL.revokeObjectURL(localImagePreview);
     }
   }
 
-  async function uploadCarPhotos(carId: string, files: File[], userId: string, isEditing: boolean) {
+  async function uploadCarPhotos(carId: string, files: File[], userId: string, isEditing: boolean, localImagePreview: string, previousImageUrl?: string) {
     if (!supabase) return;
     const uploadedPaths: string[] = [];
     let imageRowsCreated = false;
@@ -404,13 +409,15 @@ export default function VaultApp() {
 
       const { data: signedImage, error: signedUrlError } = await supabase.storage.from("diecast-images").createSignedUrl(imageRows[0].storage_path, 3600);
       if (signedUrlError) throw signedUrlError;
-      if (signedImage?.signedUrl) {
-        setCars((current) => current.map((car) => car.id === carId ? { ...car, imageUrl: signedImage.signedUrl } : car));
-      }
+      if (!signedImage?.signedUrl) throw new Error("Storage did not return an image URL.");
+      setCars((current) => current.map((car) => car.id === carId ? { ...car, imageUrl: signedImage.signedUrl } : car));
+      URL.revokeObjectURL(localImagePreview);
       notify("Car photos added");
     } catch (imageError) {
       if (imageRowsCreated) await supabase.from("car_images").delete().in("storage_path", newImagePaths);
       if (uploadedPaths.length) await supabase.storage.from("diecast-images").remove(uploadedPaths);
+      setCars((current) => current.map((car) => car.id === carId ? { ...car, imageUrl: previousImageUrl } : car));
+      URL.revokeObjectURL(localImagePreview);
       notify(imageError instanceof Error ? `Car saved, but its photo could not be uploaded: ${imageError.message}` : "Car saved, but its photos could not be uploaded.");
     }
   }
